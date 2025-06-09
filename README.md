@@ -16,3 +16,9 @@ To run locally
 ```uvicorn main:app --reload --port 8000```
 Then in your browser:
 [http://127.0.0.1:8000]
+
+# Status
+9/6/2025
+Created project.
+UI takes a query and sends to the backend.
+Backend asks claude API to distill into rail journey specific json.
