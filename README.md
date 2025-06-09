@@ -7,7 +7,7 @@ Add the following to .env...
 Your anthropic API key:
 ```ANTHROPIC_API_KEY=<your api key>```
 
-Create a venv using 3.12 (as some packages not available for 3.13)
+Create a venv using 3.12 (as some packages not currently available for latest 3.13)
 ```python3.12 -m venv venv```
 
 Install the requirements
