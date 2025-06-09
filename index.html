@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UK Rail Assistant</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .container {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            width: 90%;
+            max-width: 600px;
+        }
+        
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2rem;
+            font-weight: 600;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 40px;
+            font-size: 1.1rem;
+        }
+        
+        .query-form {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+        
+        .query-input {
+            flex: 1;
+            padding: 15px 20px;
+            border: 2px solid #e1e5e9;
+            border-radius: 12px;
+            font-size: 16px;
+            outline: none;
+            transition: all 0.3s ease;
+        }
+        
+        .query-input:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        .query-button {
+            padding: 15px 25px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            min-width: 120px;
+        }
+        
+        .query-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+        
+        .query-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .examples {
+            margin-bottom: 30px;
+        }
+        
+        .examples h3 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 1.1rem;
+        }
+        
+        .example-queries {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        
+        .example-query {
+            background: #f8f9fa;
+            padding: 8px 15px;
+            border-radius: 20px;
+            color: #555;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 14px;
+        }
+        
+        .example-query:hover {
+            background: #e9ecef;
+            transform: translateY(-1px);
+        }
+        
+        .response-area {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 20px;
+            min-height: 100px;
+            border: 2px solid #e1e5e9;
+        }
+        
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #666;
+            font-style: italic;
+        }
+        
+        .loading::after {
+            content: '';
+            width: 20px;
+            height: 20px;
+            border: 2px solid #e1e5e9;
+            border-top: 2px solid #667eea;
+            border-radius: 50%;
+            margin-left: 10px;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .response-content {
+            color: #333;
+            line-height: 1.6;
+            white-space: pre-wrap;
+        }
+        
+        .error {
+            color: #dc3545;
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            padding: 15px;
+            border-radius: 8px;
+        }
+        
+        @media (max-width: 600px) {
+            .container {
+                padding: 20px;
+                margin: 20px;
+            }
+            
+            .query-form {
+                flex-direction: column;
+            }
+            
+            .example-queries {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚂 UK Rail Assistant</h1>
+        <p class="subtitle">Ask me about train times, prices, and journeys in natural language</p>
+        
+        <form class="query-form" id="queryForm">
+            <input 
+                type="text" 
+                class="query-input" 
+                id="queryInput"
+                placeholder="e.g., when's the next train from Ivybridge to Brookwood?"
+                required
+            >
+            <button type="submit" class="query-button" id="queryButton">
+                Ask
+            </button>
+        </form>
+        
+        <div class="examples">
+            <h3>Try these examples:</h3>
+            <div class="example-queries">
+                <span class="example-query" onclick="setQuery(this)">Next train from Ivybridge to Brookwood</span>
+                <span class="example-query" onclick="setQuery(this)">Cheapest way to get from London to Manchester tomorrow</span>
+                <span class="example-query" onclick="setQuery(this)">Train times from Bristol to Birmingham on Friday morning</span>
+                <span class="example-query" onclick="setQuery(this)">How much is a return ticket from Leeds to York?</span>
+            </div>
+        </div>
+        
+        <div class="response-area" id="responseArea">
+            <div class="response-content" id="responseContent">
+                Welcome! Ask me about UK train journeys and I'll help you find the information you need.
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const queryForm = document.getElementById('queryForm');
+        const queryInput = document.getElementById('queryInput');
+        const queryButton = document.getElementById('queryButton');
+        const responseArea = document.getElementById('responseArea');
+        const responseContent = document.getElementById('responseContent');
+        
+        // Your backend API endpoint - update this when you deploy
+        const API_ENDPOINT = '/api/rail-query';
+        
+        function setQuery(element) {
+            queryInput.value = element.textContent;
+            queryInput.focus();
+        }
+        
+        function showLoading() {
+            responseContent.innerHTML = '';
+            responseArea.className = 'response-area loading';
+            responseArea.textContent = 'Searching for train information...';
+            queryButton.disabled = true;
+            queryButton.textContent = 'Searching...';
+        }
+        
+        function showResponse(content, isError = false) {
+            responseArea.className = 'response-area';
+            if (isError) {
+                responseContent.innerHTML = `<div class="error">${content}</div>`;
+            } else {
+                responseContent.innerHTML = `<div class="response-content">${content}</div>`;
+            }
+            queryButton.disabled = false;
+            queryButton.textContent = 'Ask';
+        }
+        
+        async function handleQuery(query) {
+            showLoading();
+            
+            try {
+                // For demo purposes, we'll simulate the API call
+                const response = await fetch(API_ENDPOINT, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ query: query })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`API error: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                showResponse(data.response);
+                
+            } catch (error) {
+                console.error('Query error:', error);
+                showResponse(`Sorry, I couldn't process your query right now. ${error.message}`, true);
+            }
+        }
+        
+        queryForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const query = queryInput.value.trim();
+            if (query) {
+                handleQuery(query);
+            }
+        });
+        
+        // Allow Enter key to submit
+        queryInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                queryForm.dispatchEvent(new Event('submit'));
+            }
+        });
+    </script>
+</body>
+</html>
