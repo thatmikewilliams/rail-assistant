@@ -1,5 +1,6 @@
 # rail-assistant
-AI test project to create a UK railways assistant for train times and prices
+AI test project to create a UK railways assistant for train times and prices.
+Instead of the familiar dropdowns you will be able to use natural language to query train services.
 
 Add the following to .env...
 
