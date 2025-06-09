@@ -1,16 +1,18 @@
 # rail-assistant
 AI test project to create a UK railways assistant for train times and prices
 
-add the following to .env
-ANTHROPIC_API_KEY=<your api key>
+Add the following to .env...
+
+Your anthropic API key:
+```ANTHROPIC_API_KEY=<your api key>```
 
 Create a venv using 3.12 (as some packages not available for 3.13)
-python3.12 -m venv venv
+```python3.12 -m venv venv```
 
 Install the requirements
-pip install -r requirements.txt
+```pip install -r requirements.txt```
 
-Run locally
-uvicorn main:app --reload --port 8000
-
-Browse to http://127.0.0.1:8000
+To run locally
+```uvicorn main:app --reload --port 8000```
+Then in your browser:
+[http://127.0.0.1:8000]
