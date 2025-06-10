@@ -6,6 +6,9 @@ Add the following to .env...
 
 Your anthropic API key:
 ```ANTHROPIC_API_KEY=<your api key>```
+TransportAPI developer keys - go here to signup [https://developer.transportapi.com/]
+```TRANSPORTAPI_APP_ID=<your id>```
+```TRANSPORTAPI_APP_KEY=<your key>```
 
 Create a venv using 3.12 (as some packages not currently available for latest 3.13)
 ```python3.12 -m venv venv```
