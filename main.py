@@ -53,7 +53,8 @@ class TransportAPIClient:
     async def get_train_times(self, origin_code: str, dest_code: str, 
                             departure_date: str, departure_time: str) -> Optional[Dict]:
         """Get train times from TransportAPI"""
-        url = f"{self.base_url}/train/station/{origin_code}/{departure_date}/{departure_time}/timetable.json"
+        # Try the correct URL format - note the different structure
+        url = f"{self.base_url}/train/station/{origin_code}/live.json"
         
         params = {
             'app_id': self.app_id,
@@ -62,15 +63,33 @@ class TransportAPIClient:
             'train_status': 'passenger'
         }
         
+        print(f"Trying live departures URL: {url}")
+        print(f"With params: {params}")
+        
         try:
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(follow_redirects=True) as client:
                 response = await client.get(url, params=params, timeout=15.0)
+                
+                print(f"Response status: {response.status_code}")
+                print(f"Response URL: {response.url}")
                 
                 if response.status_code == 200:
                     return response.json()
                 else:
                     print(f"TransportAPI Error: {response.status_code} - {response.text}")
-                    return None
+                    
+                    # Try alternative timetable endpoint format
+                    alt_url = f"{self.base_url}/train/station/{origin_code}/timetable.json"
+                    print(f"Trying alternative URL: {alt_url}")
+                    
+                    alt_response = await client.get(alt_url, params=params, timeout=15.0)
+                    print(f"Alternative response status: {alt_response.status_code}")
+                    
+                    if alt_response.status_code == 200:
+                        return alt_response.json()
+                    else:
+                        print(f"Alternative API Error: {alt_response.status_code} - {alt_response.text}")
+                        return None
                     
         except Exception as e:
             print(f"Error fetching train times: {e}")
@@ -297,7 +316,22 @@ async def fetch_rail_data(params: RailQueryParams) -> Optional[Dict[Any, Any]]:
         }
         
         # Extract relevant train information
-        departures = train_data.get('departures', {}).get('all', [])[:3]  # Get first 3 trains
+        departures = []
+        
+        # Handle different API response structures
+        if 'departures' in train_data:
+            # Live departures format
+            departures = train_data.get('departures', {}).get('all', [])[:3]
+        elif 'trainServices' in train_data:
+            # Timetable format
+            departures = train_data.get('trainServices', [])[:3]
+        else:
+            print(f"Unexpected API response format: {list(train_data.keys())}")
+            return None
+        
+        if not departures:
+            print("No departures found in API response")
+            return None
         
         for train in departures:
             service = {
