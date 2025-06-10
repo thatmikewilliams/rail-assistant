@@ -5,6 +5,7 @@ from typing import Dict, Any, Optional
 from pydantic import BaseModel
 import os
 from dotenv import load_dotenv
+from datetime import datetime, timedelta
 
 # Load environment variables from .env file
 load_dotenv()
@@ -19,6 +20,61 @@ class RailQueryParams(BaseModel):
     journey_type: str = "single"  # single, return, next_available
     passengers: int = 1
     railcard: Optional[str] = None
+
+class TransportAPIClient:
+    def __init__(self, app_id: str, app_key: str):
+        self.app_id = app_id
+        self.app_key = app_key
+        self.base_url = "https://transportapi.com/v3/uk"
+    
+    async def get_station_code(self, station_name: str) -> Optional[str]:
+        """Get 3-letter station code from station name"""
+        url = f"{self.base_url}/places.json"
+        params = {
+            'app_id': self.app_id,
+            'app_key': self.app_key,
+            'query': station_name,
+            'type': 'train_station'
+        }
+        
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(url, params=params, timeout=10.0)
+                data = response.json()
+                
+                if data.get('member') and len(data['member']) > 0:
+                    return data['member'][0].get('station_code')
+                    
+        except Exception as e:
+            print(f"Error getting station code for {station_name}: {e}")
+        
+        return None
+    
+    async def get_train_times(self, origin_code: str, dest_code: str, 
+                            departure_date: str, departure_time: str) -> Optional[Dict]:
+        """Get train times from TransportAPI"""
+        url = f"{self.base_url}/train/station/{origin_code}/{departure_date}/{departure_time}/timetable.json"
+        
+        params = {
+            'app_id': self.app_id,
+            'app_key': self.app_key,
+            'destination': dest_code,
+            'train_status': 'passenger'
+        }
+        
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(url, params=params, timeout=15.0)
+                
+                if response.status_code == 200:
+                    return response.json()
+                else:
+                    print(f"TransportAPI Error: {response.status_code} - {response.text}")
+                    return None
+                    
+        except Exception as e:
+            print(f"Error fetching train times: {e}")
+            return None
     
 class ClaudeRailIntegration:
     def __init__(self, api_key: str):
@@ -92,14 +148,15 @@ Examples:
 Guidelines:
 - Be conversational and friendly
 - Include key details: departure/arrival times, journey duration, changes required
-- Mention prices if available
-- Highlight any important notes (delays, platform changes, etc.)
+- Show platform information when available
+- Mention operator and any delays/status updates
 - Use 12-hour time format (e.g. 2:30pm not 14:30)
 - Keep responses concise but informative
 - If multiple options, show the best 2-3 choices
+- Use emojis sparingly for better readability (🚂 🕐 🚉)
 
 Example response format:
-"The next train from London to Manchester departs at 2:30pm, arriving at 4:45pm (2h 15m journey). It's direct with no changes required. Advance single tickets from £25.50, or off-peak return from £89.40."
+"🚂 The next train from London to Manchester departs at 2:30pm from Platform 5, arriving at 4:45pm (2h 15m journey). It's operated by Northern Rail and currently running on time."
 """
         
         user_prompt = f"""Original query: "{original_query}"
@@ -132,34 +189,31 @@ Please format this into a helpful response for the user."""
             result = response.json()
             return result["content"][0]["text"]
 
-# FastAPI integration example
+# FastAPI integration
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel as PydanticBaseModel
-# for serving static directly as a test:
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-#
-
 
 app = FastAPI()
-# for serving static directly as a test:
 app.mount("/static", StaticFiles(directory="."), name="static")
-#
 
 class RailQueryRequest(PydanticBaseModel):
     query: str
 
-# Initialize Claude integration
+# Initialize integrations
 claude_integration = ClaudeRailIntegration(
     api_key=os.getenv("ANTHROPIC_API_KEY")
 )
 
-# for serving static directly as a test:
+transport_api = TransportAPIClient(
+    app_id=os.getenv("TRANSPORTAPI_APP_ID"),
+    app_key=os.getenv("TRANSPORTAPI_APP_KEY")
+)
+
 @app.get("/")
 async def serve_frontend():
-    print("server frontend")
     return FileResponse("index.html")
-#
 
 @app.post("/api/rail-query")
 async def handle_rail_query(request: RailQueryRequest):
@@ -169,74 +223,118 @@ async def handle_rail_query(request: RailQueryRequest):
         parsed_params = await claude_integration.parse_query(request.query)
         print(f"Parsed parameters: {parsed_params}")
         
-        # Step 2: Call your rail API (placeholder)
+        # Step 2: Call the real rail API
         rail_data = await fetch_rail_data(parsed_params)
+        
+        if not rail_data:
+            return {"response": f"Sorry, I couldn't find any train information for your journey from {parsed_params.origin} to {parsed_params.destination}. Please check the station names and try again."}
         
         # Step 3: Format the response
         formatted_response = await claude_integration.format_response(
             rail_data, request.query
         )
         
-        return {"response": formatted_response}
+        return {"response": formatted_response, "raw_data": rail_data}
         
     except Exception as e:
+        print(f"Error handling query: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# Placeholder for your rail API integration
-async def fetch_rail_data(params: RailQueryParams) -> Dict[Any, Any]:
+async def fetch_rail_data(params: RailQueryParams) -> Optional[Dict[Any, Any]]:
     """
-    This is where you'll integrate with the actual UK rail API
-    Replace this with your chosen rail data provider
+    Integrate with TransportAPI to get real rail data
     """
-    # Mock response for testing
-    mock_data = {
-        "services": [
-            {
-                "departure_time": "14:32",
-                "arrival_time": "17:45", 
-                "duration": "3h 13m",
-                "changes": 1,
-                "change_stations": ["London Waterloo"],
-                "operator": "South Western Railway",
-                "price": {
-                    "advance_single": 23.50,
-                    "off_peak_return": 45.20
-                }
+    try:
+        # Get station codes
+        origin_code = await transport_api.get_station_code(params.origin)
+        dest_code = await transport_api.get_station_code(params.destination)
+        
+        if not origin_code:
+            print(f"Could not find station code for: {params.origin}")
+            return None
+        if not dest_code:
+            print(f"Could not find station code for: {params.destination}")
+            return None
+        
+        print(f"Station codes: {params.origin} -> {origin_code}, {params.destination} -> {dest_code}")
+        
+        # Format date and time
+        departure_date = params.date or "today"
+        if departure_date == 'today':
+            departure_date = datetime.now().strftime('%Y-%m-%d')
+        elif departure_date == 'tomorrow':
+            departure_date = (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')
+        
+        departure_time = params.departure_time or "now"
+        if departure_time == 'now':
+            departure_time = datetime.now().strftime('%H:%M')
+        elif departure_time == 'morning':
+            departure_time = "09:00"
+        elif departure_time == 'afternoon':
+            departure_time = "13:00"
+        elif departure_time == 'evening':
+            departure_time = "17:00"
+        
+        # Get train data from TransportAPI
+        train_data = await transport_api.get_train_times(
+            origin_code, dest_code, departure_date, departure_time
+        )
+        
+        if not train_data:
+            return None
+        
+        # Structure the response for Claude to format
+        formatted_data = {
+            "query_info": {
+                "origin": params.origin,
+                "destination": params.destination,
+                "origin_code": origin_code,
+                "destination_code": dest_code,
+                "search_date": departure_date,
+                "search_time": departure_time
+            },
+            "services": []
+        }
+        
+        # Extract relevant train information
+        departures = train_data.get('departures', {}).get('all', [])[:3]  # Get first 3 trains
+        
+        for train in departures:
+            service = {
+                "departure_time": train.get('aimed_departure_time') or train.get('expected_departure_time'),
+                "arrival_time": train.get('aimed_arrival_time') or train.get('expected_arrival_time'),
+                "expected_departure": train.get('expected_departure_time'),
+                "expected_arrival": train.get('expected_arrival_time'),
+                "platform": train.get('platform', 'TBC'),
+                "operator": train.get('operator_name', ''),
+                "service_timetable": train.get('service_timetable', {}),
+                "status": train.get('status', 'On time')
             }
-        ],
-        "origin": params.origin,
-        "destination": params.destination
-    }
-    
-    # Simulate API delay
-    await asyncio.sleep(0.5)
-    return mock_data
+            formatted_data["services"].append(service)
+        
+        return formatted_data
+        
+    except Exception as e:
+        print(f"Error fetching rail data: {e}")
+        return None
 
 # Example usage and testing
 async def test_integration():
-    """Test the Claude integration"""
-    claude = ClaudeRailIntegration(api_key="your-api-key-here")
+    """Test the complete integration"""
     
     # Test query parsing
     test_query = "when's the next train from Ivybridge to Brookwood"
-    parsed = await claude.parse_query(test_query)
+    parsed = await claude_integration.parse_query(test_query)
     print(f"Parsed: {parsed}")
     
-    # Test response formatting
-    mock_rail_data = {
-        "services": [
-            {
-                "departure_time": "14:32",
-                "arrival_time": "17:45",
-                "duration": "3h 13m",
-                "changes": 1,
-                "operator": "South Western Railway"
-            }
-        ]
-    }
+    # Test real API integration
+    rail_data = await fetch_rail_data(parsed)
+    print(f"Rail data: {json.dumps(rail_data, indent=2)}")
     
-    formatted = await claude.format_response(mock_rail_data, test_query)
-    print(f"Formatted: {formatted}")
+    if rail_data:
+        # Test response formatting
+        formatted = await claude_integration.format_response(rail_data, test_query)
+        print(f"Formatted: {formatted}")
 
 if __name__ == "__main__":
     # Run test
